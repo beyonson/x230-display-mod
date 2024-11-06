@@ -1,0 +1,100 @@
+From 0243597c68af1faa870eec15ceed8187305062e4 Mon Sep 17 00:00:00 2001
+From: garrett <nah>
+Date: Wed, 6 Nov 2024 16:32:56 -0500
+Subject: [PATCH] apply patches for X230 with display mod
+
+---
+ drivers/acpi/pci_root.c                   | 12 ------------
+ drivers/gpu/drm/i915/display/intel_dp.c   |  4 ++--
+ drivers/gpu/drm/i915/display/intel_lvds.c |  8 ++++++++
+ drivers/pci/pci-acpi.c                    |  3 +--
+ 4 files changed, 11 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/acpi/pci_root.c b/drivers/acpi/pci_root.c
+index 58b89b8d950e..ec694128fbc2 100644
+--- a/drivers/acpi/pci_root.c
++++ b/drivers/acpi/pci_root.c
+@@ -613,15 +613,6 @@ static void negotiate_os_control(struct acpi_pci_root *root, int *no_aspm)
+ 			*no_aspm = 1;
+ 		}
+ 	} else {
+-		/*
+-		 * We want to disable ASPM here, but aspm_disabled
+-		 * needs to remain in its state from boot so that we
+-		 * properly handle PCIe 1.1 devices.  So we set this
+-		 * flag here, to defer the action until after the ACPI
+-		 * root scan.
+-		 */
+-		*no_aspm = 1;
+-
+ 		/* _OSC is optional for PCI host bridges */
+ 		if (status == AE_NOT_FOUND && !is_pcie(root))
+ 			return;
+@@ -740,9 +731,6 @@ static int acpi_pci_root_add(struct acpi_device *device,
+ 		goto remove_dmar;
+ 	}
+ 
+-	if (no_aspm)
+-		pcie_no_aspm();
+-
+ 	pci_acpi_add_bus_pm_notifier(device);
+ 	device_set_wakeup_capable(root->bus->bridge, device->wakeup.flags.valid);
+ 
+diff --git a/drivers/gpu/drm/i915/display/intel_dp.c b/drivers/gpu/drm/i915/display/intel_dp.c
+index 94d2a15d8444..bab9e7c9b72d 100644
+--- a/drivers/gpu/drm/i915/display/intel_dp.c
++++ b/drivers/gpu/drm/i915/display/intel_dp.c
+@@ -116,7 +116,7 @@ bool intel_dp_is_edp(struct intel_dp *intel_dp)
+ {
+ 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
+ 
+-	return dig_port->base.type == INTEL_OUTPUT_EDP;
++	return dig_port->base.type == INTEL_OUTPUT_EDP || strncmp(intel_dp->attached_connector->base.name, "DP-3", 4) == 0;
+ }
+ 
+ static void intel_dp_unset_edid(struct intel_dp *intel_dp);
+@@ -6149,7 +6149,7 @@ static bool _intel_dp_is_port_edp(struct drm_i915_private *dev_priv,
+ 	if (DISPLAY_VER(dev_priv) < 5)
+ 		return false;
+ 
+-	if (DISPLAY_VER(dev_priv) < 9 && port == PORT_A)
++	if (DISPLAY_VER(dev_priv) < 9 && port == PORT_D)
+ 		return true;
+ 
+ 	return devdata && intel_bios_encoder_supports_edp(devdata);
+diff --git a/drivers/gpu/drm/i915/display/intel_lvds.c b/drivers/gpu/drm/i915/display/intel_lvds.c
+index 221f5c6c871b..c12355aade6d 100644
+--- a/drivers/gpu/drm/i915/display/intel_lvds.c
++++ b/drivers/gpu/drm/i915/display/intel_lvds.c
+@@ -733,6 +733,14 @@ static const struct dmi_system_id intel_no_lvds[] = {
+ 			DMI_MATCH(DMI_PRODUCT_NAME, "P845"),
+ 		},
+ 	},
++	{
++		.callback = intel_no_lvds_dmi_callback,
++		.ident = "ThinkPad X330",
++		.matches = {
++			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
++			DMI_MATCH(DMI_PRODUCT_NAME, "2320HQU"),
++		},
++	},
+ 
+ 	{ }	/* terminating entry */
+ };
+diff --git a/drivers/pci/pci-acpi.c b/drivers/pci/pci-acpi.c
+index 004575091596..57099f2618d0 100644
+--- a/drivers/pci/pci-acpi.c
++++ b/drivers/pci/pci-acpi.c
+@@ -1506,8 +1506,7 @@ static int __init acpi_pci_init(void)
+ 	}
+ 
+ 	if (acpi_gbl_FADT.boot_flags & ACPI_FADT_NO_ASPM) {
+-		pr_info("ACPI FADT declares the system doesn't support PCIe ASPM, so disable it\n");
+-		pcie_no_aspm();
++		pr_info("ACPI FADT declares the system doesn't support PCIe ASPM, but we ignore that on this X330\n");
+ 	}
+ 
+ 	if (acpi_pci_disabled)
+-- 
+2.47.0
+
